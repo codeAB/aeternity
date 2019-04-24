@@ -885,8 +885,9 @@ grant_fees(Node, Trees, Delay, FraudStatus, State) ->
         calc_rewards(FraudStatus1, FraudStatus2, KeyFees, MineReward2,
                      FraudReward1, node_is_genesis(KeyNode1, State)),
 
+    OldestBeneficiaryHeight = node_height(KeyNode1),
     {AdjustedReward1, AdjustedReward2, FoundationReward} =
-        reward_split_for_protocol_foundation(BeneficiaryReward1, BeneficiaryReward2, NewestBlockHeight),
+        reward_split_for_protocol_foundation(BeneficiaryReward1, BeneficiaryReward2, OldestBeneficiaryHeight),
 
     Trees1 =
         lists:foldl(
@@ -1165,14 +1166,10 @@ calc_rewards(FraudStatus1, FraudStatus2, GenerationFees,
     {B1Amt, B2Amt, LockedAmount}.
 
 reward_split_for_protocol_foundation(BeneficiaryReward1, BeneficiaryReward2, NewestNodeHeight) ->
-
-    %% Control activation with direct height instead protocol due to
-    %% in troduction near next hardfork and potential
-    %% activation during the next hardfork life
     ActivationFlag = aec_governance:protocol_beneficiary_activation(NewestNodeHeight),
     if ActivationFlag =:= true ->
         ContribFactor = aec_governance:protocol_beneficiary_factor(),
-        Contrib1 = BeneficiaryReward1 * ContribFactor div 1000,
+        Contrib1 = BeneficiaryReward1 * ContribFactor div 1000, %% todo: drop zeros, div 100 after merges
         AdjustedBeneficiaryReward1 = BeneficiaryReward1 - Contrib1,
         Contrib2 = BeneficiaryReward2 * ContribFactor div 1000,
         AdjustedBeneficiaryReward2 = BeneficiaryReward2 - Contrib2,
