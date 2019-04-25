@@ -484,15 +484,25 @@ vm_gas_table() ->
      }.
 
 
+-define(PROTOCOL_BENEFICIARY_ADDRESS, <<"ak_2uN1CEVGs4D5QnFudhp8dSqrwJEMFiTfwvbCK3SJzVYRDiusfd">>). %% TODO: random, change for real
+-define(PROTOCOL_BENEFICIARY_ENABLED, true).
+-define(PROTOCOL_BENEFICIARY_FACTOR, 100). %% 10%
 
 protocol_beneficiary_enabled() ->
-    true.
+    aeu_env:user_config_or_env([<<"chain">>, <<"protocol_beneficiary_enabled">>],
+                                aecore, protocol_beneficiary_enabled, ?PROTOCOL_BENEFICIARY_ENABLED).
 
 protocol_beneficiary() ->
-    <<250,151,56,184,99,123,38,230,217,93,156,146,231,90,209,233,15,203,25,102,32,140,178,207,59,171,81,2,249,197,198,61>>.
+    ProtocolBeneficiary = aeu_env:user_config_or_env([<<"chain">>, <<"protocol_beneficiary_address">>],
+                                                      aecore, protocol_beneficiary_address, ?PROTOCOL_BENEFICIARY_ADDRESS),
+    case aeser_api_encoder:safe_decode(account_pubkey, ProtocolBeneficiary) of
+        {ok, ProtocolBeneficiary} -> ProtocolBeneficiary;
+        {error, Reason} -> {error, {protocol_beneficiary_error, Reason}}
+    end.
 
 protocol_beneficiary_factor() ->
-    100. %% 10%
+    aeu_env:user_config_or_env([<<"chain">>, <<"protocol_beneficiary_factor">>],
+        aecore, protocol_beneficiary_factor, ?PROTOCOL_BENEFICIARY_FACTOR).
 
 protocol_beneficiary_activation(Height) ->
     case aec_hard_forks:protocol_effective_at_height(Height) of
