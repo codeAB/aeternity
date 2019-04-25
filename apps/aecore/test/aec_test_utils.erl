@@ -249,6 +249,7 @@ mock_governance() ->
     meck:new(aec_target, [passthrough]),
     meck:expect(aec_governance, key_blocks_to_check_difficulty_count, 0, 1),
     meck:expect(aec_governance, protocol_beneficiary_activation, 1, true),
+    meck:expect(aec_governance, protocol_beneficiary_enabled, 0, true),
     #{ public := PubKeyProtocol, secret := _ } = enacl:sign_keypair(),
     meck:expect(aec_governance, protocol_beneficiary, 0, PubKeyProtocol),
     meck:expect(aec_target, verify, 2, ok).
@@ -305,7 +306,8 @@ grant_fees(FromHeight, Chain, TreesIn, BeneficiaryAccount) ->
     BlockReward = aec_governance:block_mine_reward(FromHeight + 1),
     Beneficiary2Reward = Fees - Beneficiary1Reward + BlockReward,
     {Benefits1, Benefits2, BenefitsProto} =
-        case aec_governance:protocol_beneficiary_activation(FromHeight) of
+        case aec_governance:protocol_beneficiary_activation(FromHeight) and
+             aec_governance:protocol_beneficiary_enabled() of
             true ->
                 %% Assume we keep div 1000 in aec_chain_state:
                 ContribFactor = aec_governance:protocol_beneficiary_factor(),
@@ -321,9 +323,12 @@ grant_fees(FromHeight, Chain, TreesIn, BeneficiaryAccount) ->
 
 grant_fees_iter(_, {Benefits2, Beneficiary2}, {0,_}, 0, TreesIn) ->
     aec_trees:grant_fee(Beneficiary2, TreesIn, Benefits2);
-grant_fees_iter(_, {Benefits2, Beneficiary2}, {BenefitsProto,BeneficiaryProto}, 0, TreesIn) ->
+grant_fees_iter(_, {Benefits2, Beneficiary2}, {BenefitsProto, BeneficiaryProto}, 0, TreesIn) ->
     Trees1 = aec_trees:grant_fee(Beneficiary2, TreesIn, Benefits2),
     aec_trees:grant_fee(BeneficiaryProto, Trees1, BenefitsProto);
+grant_fees_iter({Benefits1, Beneficiary1}, {Benefits2, Beneficiary2}, {0,_BeneficiaryProto}, _, TreesIn) ->
+    Trees1 = aec_trees:grant_fee(Beneficiary2, TreesIn, Benefits2),
+    aec_trees:grant_fee(Beneficiary1, Trees1, Benefits1);
 grant_fees_iter({Benefits1, Beneficiary1}, {Benefits2, Beneficiary2}, {BenefitsProto,BeneficiaryProto}, _, TreesIn) ->
     Trees1 = aec_trees:grant_fee(Beneficiary2, TreesIn, Benefits2),
     Trees2 = aec_trees:grant_fee(BeneficiaryProto, Trees1, BenefitsProto),

@@ -1166,8 +1166,9 @@ calc_rewards(FraudStatus1, FraudStatus2, GenerationFees,
     {B1Amt, B2Amt, LockedAmount}.
 
 reward_split_for_protocol_foundation(BeneficiaryReward1, BeneficiaryReward2, NewestNodeHeight) ->
-    ActivationFlag = aec_governance:protocol_beneficiary_activation(NewestNodeHeight),
-    if ActivationFlag =:= true ->
+    ActivationHeight = aec_governance:protocol_beneficiary_activation(NewestNodeHeight),
+    ActivationFlag = aec_governance:protocol_beneficiary_enabled(),
+    if ActivationHeight and ActivationFlag ->
         ContribFactor = aec_governance:protocol_beneficiary_factor(),
         Contrib1 = BeneficiaryReward1 * ContribFactor div 1000, %% todo: drop zeros, div 100 after merges
         AdjustedBeneficiaryReward1 = BeneficiaryReward1 - Contrib1,

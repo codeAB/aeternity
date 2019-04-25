@@ -967,12 +967,22 @@ fees_test_() ->
              aec_test_utils:stop_chain_db(),
              teardown_meck_and_keys(TmpDir)
      end,
-     [{"Check fee division between three beneficiaries",
-       fun fees_three_beneficiaries/0},
+     [{"Check fee division between three beneficiaries with reward split",
+       fun fees_three_beneficiaries_with_split/0},
+       {"Check fee division between three beneficiaries without reward split",
+       fun fees_three_beneficiaries_without_split/0},
       {"Check reward is delayed",
        fun fees_delayed_reward/0}
      ]
     }.
+
+fees_three_beneficiaries_with_split() ->
+    meck:expect(aec_governance, protocol_beneficiary_enabled, 0, true),
+    fees_three_beneficiaries().
+
+fees_three_beneficiaries_without_split() ->
+    meck:expect(aec_governance, protocol_beneficiary_enabled, 0, false),
+    fees_three_beneficiaries().
 
 fees_three_beneficiaries() ->
     #{ public := PubKeyProtocol, secret := _ } = enacl:sign_keypair(),
@@ -1053,12 +1063,15 @@ fees_three_beneficiaries() ->
     ?assertEqual(split_reward(aec_governance:block_mine_reward(3) + reward_60(Fee3)),
                  orddict:fetch(PubKey8, DictBal2)),
 
-    TotalRewards = aec_governance:block_mine_reward(1) + aec_governance:block_mine_reward(2) + aec_governance:block_mine_reward(3)
-                   + Fee1 + Fee2 + Fee3,
-    ProtocolBenefits = TotalRewards - split_reward(TotalRewards),
-    ?assertEqual(ProtocolBenefits, orddict:fetch(PubKeyProtocol, DictBal2)),
-
-    %% TODO: mock governance
+    case aec_governance:protocol_beneficiary_enabled() of
+        true ->
+            TotalRewards = aec_governance:block_mine_reward(1) + aec_governance:block_mine_reward(2) + aec_governance:block_mine_reward(3)
+                + Fee1 + Fee2 + Fee3,
+            ProtocolBenefits = TotalRewards - split_reward(TotalRewards),
+            ?assertEqual(ProtocolBenefits, orddict:fetch(PubKeyProtocol, DictBal2));
+        false ->
+            ?assertEqual(false, orddict:is_key(PubKeyProtocol, DictBal2))
+    end,
 
     %% Miners' balances did not change, since beneficiaries took the rewards.
     ?assertEqual(error, orddict:find(PubKey3, DictBal2)),
@@ -1725,9 +1738,13 @@ reward_40(Fee) -> Fee * 4 div 10.
 reward_60(Fee) -> Fee - reward_40(Fee).
 
 split_reward(Fee) ->
-    ContribFactor = aec_governance:protocol_beneficiary_factor(),
-    Fee * (1000 - ContribFactor) div 1000.
-
+    case aec_governance:protocol_beneficiary_enabled() of
+        true ->
+            ContribFactor = aec_governance:protocol_beneficiary_factor(),
+            Fee * (1000 - ContribFactor) div 1000;
+        false ->
+            Fee
+    end.
 
 %%%===================================================================
 %%% Hard forking tests
