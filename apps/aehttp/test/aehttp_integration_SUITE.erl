@@ -3191,10 +3191,14 @@ pending_transactions(_Config) ->
                 BlockRewards(MinedBlocks2a ++ MinedBlocks2b)
         end,
 
-    %% We get SPEND_FEE back as miner reward except the cut for protocol beneficiary
-    SpendFeeFoundationCut = ?SPEND_FEE * aec_governance:protocol_beneficiary_factor() div 1000,
-    ExpectedReward2 = lists:sum(MinedRewards2) - SpendFeeFoundationCut,
-
+    ExpectedReward2 = lists:sum(MinedRewards2) -
+        case aec_governance:get_network_id() of
+            <<"local_fortuna_testnet">> ->
+                %% We get SPEND_FEE back as miner reward except the cut for protocol beneficiary
+                ?SPEND_FEE * aec_governance:protocol_beneficiary_factor() div 1000;
+            _ ->
+                0
+        end,
     {ok, 200, #{<<"balance">> := Bal1}} = get_balance_at_top(),
     ct:log("Bal1: ~p, Bal0: ~p, Expected reward: ~p, Amount to spend: ~p",
            [Bal1, Bal0, ExpectedReward2, AmountToSpent]),
