@@ -971,8 +971,10 @@ fees_test_() ->
        fun fees_three_beneficiaries_with_split/0},
        {"Check fee division between three beneficiaries without reward split",
        fun fees_three_beneficiaries_without_split/0},
-      {"Check reward is delayed",
-       fun fees_delayed_reward/0}
+      {"Check reward is delayed with reward split",
+       fun fees_delayed_reward_with_split/0},
+      {"Check reward is delayed without reward split",
+       fun fees_delayed_reward_without_split/0}
      ]
     }.
 
@@ -1078,6 +1080,14 @@ fees_three_beneficiaries() ->
     ?assertEqual(error, orddict:find(PubKey4, DictBal2)),
     ?assertEqual(error, orddict:find(PubKey5, DictBal2)),
     ok.
+
+fees_delayed_reward_with_split() ->
+    meck:expect(aec_governance, protocol_beneficiary_enabled, 0, true),
+    fees_delayed_reward().
+
+fees_delayed_reward_without_split() ->
+    meck:expect(aec_governance, protocol_beneficiary_enabled, 0, false),
+    fees_delayed_reward().
 
 fees_delayed_reward() ->
     %% Delay reward by 2 key blocks / generations.
