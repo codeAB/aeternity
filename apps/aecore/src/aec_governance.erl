@@ -493,9 +493,9 @@ protocol_beneficiary_enabled() ->
                                 aecore, protocol_beneficiary_enabled, ?PROTOCOL_BENEFICIARY_ENABLED).
 
 protocol_beneficiary() ->
-    ProtocolBeneficiary = aeu_env:user_config_or_env([<<"chain">>, <<"protocol_beneficiary_address">>],
+    ProtocolBeneficiary0 = aeu_env:user_config_or_env([<<"chain">>, <<"protocol_beneficiary_address">>],
                                                       aecore, protocol_beneficiary_address, ?PROTOCOL_BENEFICIARY_ADDRESS),
-    case aeser_api_encoder:safe_decode(account_pubkey, ProtocolBeneficiary) of
+    case aeser_api_encoder:safe_decode(account_pubkey, ProtocolBeneficiary0) of
         {ok, ProtocolBeneficiary} -> ProtocolBeneficiary;
         {error, Reason} -> {error, {protocol_beneficiary_error, Reason}}
     end.
