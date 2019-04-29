@@ -26,8 +26,8 @@
 
 all() ->
     [
-     siblings_on_key_block
-     %siblings_on_micro_block
+      siblings_on_key_block
+    , siblings_on_micro_block
     ].
 
 init_per_suite(Config) ->
@@ -76,14 +76,7 @@ siblings_on_key_block(Config) ->
     aecore_suite_utils:mock_mempool_nonce_offset(N1, 100),
     aecore_suite_utils:mock_mempool_nonce_offset(N2, 100),
 
-    {ok, [KB0X]=KB0} = aecore_suite_utils:mine_key_blocks(N1, 1),
-    put(n1, N1),
-    put(n2, N2),
-    put(bnf1, aec_headers:beneficiary(aec_blocks:to_header(KB0X))),
-    log_key_blocks(N1, KB0),
-
-    {ok, [KB1X]=KB1} = aecore_suite_utils:mine_key_blocks(N1, 1),
-    log_key_blocks(N1, KB1),
+    {ok, _} = aecore_suite_utils:mine_key_blocks(N1, 2),
 
     Account1 = #{ pubkey := PK1 } = new_keypair(),
     Account2 = #{ pubkey := PK2 } = new_keypair(),
@@ -94,11 +87,9 @@ siblings_on_key_block(Config) ->
     {ok, Tx0a} = add_spend_tx(N1, 1000000, Fee0a, 1, 10, patron(), PK1),
     {ok, Tx0b} = add_spend_tx(N1, 1000000, Fee0b, 2, 10, patron(), PK2),
 
-    {ok, B} = aecore_suite_utils:mine_blocks_until_txs_on_chain(N1, [Tx0a, Tx0b], ?MAX_MINED_BLOCKS),
-    log_key_blocks(N1, B),
+    {ok, _} = aecore_suite_utils:mine_blocks_until_txs_on_chain(N1, [Tx0a, Tx0b], ?MAX_MINED_BLOCKS),
 
     {ok, N1Blocks2} = aecore_suite_utils:mine_key_blocks(N1, 1),
-    log_key_blocks(N1, N1Blocks2),
 
     Top = lists:last(N1Blocks2),
     ?assertEqual(key, aec_blocks:type(Top)),
@@ -120,11 +111,7 @@ siblings_on_micro_block(Config) ->
     aecore_suite_utils:mock_mempool_nonce_offset(N1, 100),
     aecore_suite_utils:mock_mempool_nonce_offset(N2, 100),
 
-    {ok, [KB1X]=KB1} = aecore_suite_utils:mine_key_blocks(N1, 1),
-    put(n1, N1),
-    put(n2, N2),
-    put(bnf1, aec_headers:beneficiary(aec_blocks:to_header(KB1X))),
-    log_key_blocks(N1, KB1),
+    {ok, _} = aecore_suite_utils:mine_key_blocks(N1, 2),
 
     Account1 = #{ pubkey := PK1 } = new_keypair(),
     Account2 = #{ pubkey := PK2 } = new_keypair(),
@@ -139,8 +126,7 @@ siblings_on_micro_block(Config) ->
     {ok, Tx0c} = add_spend_tx(N1, 100000 * aec_test_utils:min_gas_price(), Fee0c, 3, 10, patron(), PK3),
 
     Txs = [Tx0a, Tx0b, Tx0c],
-    {ok, B} = aecore_suite_utils:mine_blocks_until_txs_on_chain(N1, Txs, ?MAX_MINED_BLOCKS),
-    log_key_blocks(N1, B),
+    {ok, _} = aecore_suite_utils:mine_blocks_until_txs_on_chain(N1, Txs, ?MAX_MINED_BLOCKS),
 
     Top = ensure_top_is_a_micro(N1, Account3, 1),
 
@@ -154,8 +140,7 @@ ensure_top_is_a_micro(_Node,_Account, Nonce) when Nonce > 5 ->
 ensure_top_is_a_micro(Node, Account, Nonce) ->
     %% We want to make a top that is a micro block
     {ok, _Tx1} = add_spend_tx(Node, 1000, 20000 * aec_test_utils:min_gas_price(), 1, 10, Account, new_pubkey()),
-    {ok, B} = aecore_suite_utils:mine_micro_blocks(Node, 1),
-    log_key_blocks(Node, B),
+    {ok, _} = aecore_suite_utils:mine_micro_blocks(Node, 1),
     Top = rpc:call(Node, aec_chain, top_block, []),
     case aec_blocks:type(Top) of
         micro -> Top;
@@ -193,9 +178,8 @@ siblings_common(TopBlock, N1, N2, Account1, Account2) ->
     FraudHeight = aec_blocks:height(Micro1),
 
     %% Make N2 mine a key block to start the next generation.
-    {ok, [Key2]=KB2} = aecore_suite_utils:mine_key_blocks(N2, 1),
+    {ok, [Key2]} = aecore_suite_utils:mine_key_blocks(N2, 1),
     put(bnf2, aec_headers:beneficiary(aec_blocks:to_header(Key2))),
-    log_key_blocks(N2, KB2),
 
     %% Now we need a micro block to report the fraud in.
     {ok, _} = add_spend_tx(N2, 1000, SpendFee,  1,  10, Account2, new_pubkey()),
@@ -221,36 +205,39 @@ siblings_common(TopBlock, N1, N2, Account1, Account2) ->
     ?assertEqual(no_fraud, aec_blocks:pof(MicroNoFraud)),
 
     %% Mine some key blocks now to check the rewards
-    Delay = rpc:call(N2, aec_governance, beneficiary_reward_delay, []) + 4,
-    {ok, KB22} = aecore_suite_utils:mine_key_blocks(N2, Delay),
-    log_key_blocks(N2, KB22),
-
-    {ok, N1MinedBlock} = rpc:call(N2, aec_chain, get_key_block_by_height, [1]),
-    Beneficiary1 = aec_blocks:beneficiary(N1MinedBlock),
-    {ok, TopKeyBlock} = rpc:call(N2, aec_chain, top_key_block, []),
-    N2Height = aec_blocks:height(TopKeyBlock),
-    Beneficiary2 = aec_blocks:beneficiary(TopKeyBlock),
-
-    %% Check the rewards
-    {value, Acc1} = rpc:call(N2, aec_chain, get_account, [Beneficiary1]),
-    {value, Acc2} = rpc:call(N2, aec_chain, get_account, [Beneficiary2]),
-
-    Bal1 = aec_accounts:balance(Acc1),
-    Bal2 = aec_accounts:balance(Acc2),
-
-    ct:pal("Reward1 between blocks: ~p-~p~nFraud height: ~p", [1, N1KeyBlocksCount, FraudHeight]),
-
-    Block1Reward = aec_governance:block_mine_reward(1),
-    Reward1 = lists:sum([aec_governance:block_mine_reward(X)
-                         || X <- lists:seq(2, N1KeyBlocksCount),
-                            X =/= FraudHeight]) + Block1Reward,
-    FraudReward = aec_governance:fraud_report_reward(FraudHeight),
-    Reward2 = lists:sum([aec_governance:block_mine_reward(X)
-                         || X <- lists:seq(N1KeyBlocksCount + 1, N2Height - Delay),
-                            X =/= FraudHeight]) + FraudReward,
-
-    case aec_governance:get_network_id() of
+    PofDelay = rpc:call(N2, aec_governance, beneficiary_reward_delay, []),
+    case rpc:call(N2, aec_governance, get_network_id, []) of
+        %% Foundation reward split happens at height N - 4.
         <<"local_fortuna_testnet">> ->
+            Delay = PofDelay + 4,
+            {ok, _} = aecore_suite_utils:mine_key_blocks(N2, Delay),
+
+            {ok, N1MinedBlock} = rpc:call(N2, aec_chain, get_key_block_by_height, [1]),
+            Beneficiary1 = aec_blocks:beneficiary(N1MinedBlock),
+            {ok, TopKeyBlock} = rpc:call(N2, aec_chain, top_key_block, []),
+            N2Height = aec_blocks:height(TopKeyBlock),
+            Beneficiary2 = aec_blocks:beneficiary(TopKeyBlock),
+
+            %% Check the rewards
+            {value, Acc1} = rpc:call(N2, aec_chain, get_account, [Beneficiary1]),
+            {value, Acc2} = rpc:call(N2, aec_chain, get_account, [Beneficiary2]),
+
+            Bal1 = aec_accounts:balance(Acc1),
+            Bal2 = aec_accounts:balance(Acc2),
+
+            %% The fortuna is active at height 1. The block reward at height 1
+            %% is NOT split yet, the split kicks in at height 2! So the
+            %% beneficiary takes 100% of reward for block at height 1.
+            Block1Reward = aec_governance:block_mine_reward(1),
+            Reward1 = lists:sum([aec_governance:block_mine_reward(X)
+                                || X <- lists:seq(2, N1KeyBlocksCount),
+                                    X =/= FraudHeight]) + Block1Reward,
+            FraudReward = aec_governance:fraud_report_reward(FraudHeight),
+            %% The last PofDelay blocks are not included in the reward.
+            Reward2 = lists:sum([aec_governance:block_mine_reward(X)
+                                || X <- lists:seq(N1KeyBlocksCount + 1, N2Height - PofDelay),
+                                    X =/= FraudHeight]) + FraudReward,
+
             {value, FoundationAcc} = rpc:call(N2, aec_chain, get_account,
                                               [aec_governance:protocol_beneficiary()]),
 
@@ -266,30 +253,41 @@ siblings_common(TopBlock, N1, N2, Account1, Account2) ->
             %% must be at least the sum of all foundation rewards (without the fees).
             true = FoundationBal >= (FoundationReward1 + FoundationReward2),
 
-            ct:pal("Bal1:              ~p~n"
-                   "Reward1:           ~p~n"
-                   "FoundationReward1: ~p~n"
-                   "FraudReward:       ~p~n"
-                   "ExpectedBal1:      ~p~n",
-                   [Bal1, Reward1, FoundationReward1, FraudReward, Reward1 - FoundationReward1]),
-
             case Bal1 >= (Reward1 - FoundationReward1) andalso
                  Bal1 < (Reward1 - FoundationReward1) + 100000 * aec_test_utils:min_gas_price() of %% should get some fees
                 true -> ok;
                 false -> error({bad_balance1, Bal1})
             end,
-            ct:pal("Bal2:              ~p~n"
-                   "Reward2:           ~p~n"
-                   "FoundationReward2: ~p~n"
-                   "FraudReward:       ~p~n"
-                   "ExpectedBal2:      ~p~n",
-                   [Bal2, Reward2, FoundationReward2, FraudReward, Reward2 - FoundationReward2]),
             case Bal2 >= (Reward2 - FoundationReward2) andalso
                 Bal2 < (Reward2 - FoundationReward2) + 100000 * aec_test_utils:min_gas_price() of
                 true -> ok;
                 false -> error({bad_balance2, Bal2})
             end;
         _Other ->
+            Delay = PofDelay,
+            {ok, _} = aecore_suite_utils:mine_key_blocks(N2, Delay),
+
+            {ok, N1MinedBlock} = rpc:call(N2, aec_chain, get_key_block_by_height, [1]),
+            Beneficiary1 = aec_blocks:beneficiary(N1MinedBlock),
+            {ok, TopKeyBlock} = rpc:call(N2, aec_chain, top_key_block, []),
+            N2Height = aec_blocks:height(TopKeyBlock),
+            Beneficiary2 = aec_blocks:beneficiary(TopKeyBlock),
+
+            %% Check the rewards
+            {value, Acc1} = rpc:call(N2, aec_chain, get_account, [Beneficiary1]),
+            {value, Acc2} = rpc:call(N2, aec_chain, get_account, [Beneficiary2]),
+
+            Bal1 = aec_accounts:balance(Acc1),
+            Bal2 = aec_accounts:balance(Acc2),
+
+            Reward1 = lists:sum([aec_governance:block_mine_reward(X)
+                                || X <- lists:seq(1, N1KeyBlocksCount),
+                                    X =/= FraudHeight]),
+            FraudReward = aec_governance:fraud_report_reward(FraudHeight),
+            Reward2 = lists:sum([aec_governance:block_mine_reward(X)
+                                || X <- lists:seq(N1KeyBlocksCount + 1, N2Height - Delay),
+                                    X =/= FraudHeight]) + FraudReward,
+
             case Bal1 >= Reward1 andalso Bal1 < Reward1 + 100000 * aec_test_utils:min_gas_price() of %% should get some fees
                 true -> ok;
                 false -> error({bad_balance1, Bal1})
@@ -346,48 +344,5 @@ get_lock_holder_balance(N) ->
         {value, Acc} ->
             _Bal = aec_accounts:balance(Acc);
         none -> 0
-    end.
-
-log_key_blocks(Node, [K | Ks]) ->
-    case aec_blocks:type(K) of
-        key ->
-            BB = aec_headers:beneficiary(aec_blocks:to_header(K)),
-            B1 = get(bnf1),
-            B2 = get(bnf2),
-            N1 = get(n1),
-            N2 = get(n2),
-            ct:pal("KEY BLOCK (~p)(~p):~n"
-                   "height:         ~p~n"
-                   "version:        ~p~n"
-                   "block bnf:      ~p~n"
-                   "bnf1:           ~p~n"
-                   "bnf2:           ~p~n"
-                   "node1 bnf1_bal: ~p~n"
-                   "node1 bnf2_bal: ~p~n"
-                   "node2 bnf2_bal: ~p",
-                [Node,
-                 aec_governance:protocol_beneficiary_activation(aec_headers:height(aec_blocks:to_header(K))),
-                 aec_headers:height(aec_blocks:to_header(K)),
-                 aec_headers:version(aec_blocks:to_header(K)),
-                 BB,
-                 B1,
-                 B2,
-                 bal(N1, B1),
-                 bal(N1, B2),
-                 bal(N2, B2)
-                ]);
-        micro ->
-            ok
-    end,
-    log_key_blocks(Node, Ks);
-log_key_blocks(_Node, []) ->
-    ok.
-
-bal(Node, Bnf) ->
-    case rpc:call(Node, aec_chain, get_account, [Bnf]) of
-        {value, Acc} ->
-            aec_accounts:balance(Acc);
-        _Other ->
-            undefined
     end.
 
